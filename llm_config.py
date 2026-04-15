@@ -81,14 +81,24 @@ def render_llm_selector(default_temp: float = 0.3):
             key="llm_api_key",
         )
     else:
-        # Ollama: base URL
+        # Ollama: base URL + setup instructions
+        st.markdown(
+            '<div style="background:#0F1A14;border:1px solid #1C2E22;border-left:3px solid #8B5CF6;'
+            'border-radius:6px;padding:8px 10px;margin-bottom:8px;">'
+            '<div style="font-size:0.72rem;color:#8B5CF6;font-weight:600;margin-bottom:4px;">No API key needed</div>'
+            '<div style="font-size:0.72rem;color:#4B5563;line-height:1.5;">'
+            '1. Run <code style="color:#A78BFA;">ollama serve</code> in a terminal<br>'
+            '2. Pull a model: <code style="color:#A78BFA;">ollama pull llama3.2</code><br>'
+            '3. Select the model above and chat'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
         st.markdown('<div class="section-label">Ollama base URL</div>', unsafe_allow_html=True)
         base_url = st.text_input(
             "ollama_url", label_visibility="collapsed",
             value="http://localhost:11434/v1",
             key="ollama_base_url",
         )
-        st.caption("Make sure Ollama is running locally (`ollama serve`).")
 
     # Ready state
     is_configured = bool(
