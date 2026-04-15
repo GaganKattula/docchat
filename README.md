@@ -4,7 +4,7 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-red?logo=streamlit)
 ![LangChain](https://img.shields.io/badge/LangChain-0.2%2B-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
-![CI](https://github.com/YOUR_USERNAME/docchat/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/GaganKattula/docchat/actions/workflows/ci.yml/badge.svg)
 
 Upload any PDF, Word document, or plain text file and ask questions in plain English. DocChat uses **Retrieval-Augmented Generation (RAG)** to find answers directly from your content — no hallucination, every answer is grounded in the source.
 
@@ -68,7 +68,7 @@ User query ───────────────────────
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/docchat.git
+git clone https://github.com/GaganKattula/docchat.git
 cd docchat
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -135,7 +135,7 @@ No secrets needed at deploy time — users enter their own API key in the sideba
 
 ```bash
 # On your server
-git clone https://github.com/YOUR_USERNAME/docchat.git
+git clone https://github.com/GaganKattula/docchat.git
 cd docchat
 docker build -t docchat .
 docker run -d -p 80:8501 --restart unless-stopped docchat
