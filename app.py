@@ -156,23 +156,44 @@ with st.sidebar:
         accept_multiple_files=True,
     )
 
-    if uploaded_files and is_configured:
+    # Guard: Anthropic needs a valid embed key before we allow uploads
+    anthropic_embed_ready = (
+        provider != "Anthropic" or bool(embed_api_key and embed_api_key.strip())
+    )
+    if provider == "Anthropic" and is_configured and not anthropic_embed_ready:
+        st.warning("Enter an embedding API key above before uploading documents.")
+
+    if uploaded_files and is_configured and anthropic_embed_ready:
         file_set = frozenset((f.name, f.size) for f in uploaded_files)
         if file_set != st.session_state.get("_last_file_set"):
             with st.spinner("Embedding documents..."):
-                chunks, file_names = load_and_chunk(uploaded_files)
-                if chunks:
-                    embeddings = get_embeddings(provider, api_key, embed_provider, embed_api_key)
-                    vs = build_vectorstore(chunks, embeddings)
-                    llm = build_llm(provider, model, api_key, streaming=True)
-                    chain, retriever = build_rag_chain(vs, llm)
-                    st.session_state.update({
-                        "vectorstore": vs, "chain": chain, "retriever": retriever,
-                        "file_names": file_names, "chunk_count": len(chunks),
-                        "messages": [], "_last_file_set": file_set,
-                    })
-                else:
-                    st.error("Could not extract text from the uploaded files.")
+                try:
+                    chunks, file_names = load_and_chunk(uploaded_files)
+                    if chunks:
+                        embeddings = get_embeddings(
+                            provider,
+                            api_key.strip() if api_key else None,
+                            embed_provider,
+                            embed_api_key.strip() if embed_api_key else None,
+                        )
+                        vs = build_vectorstore(chunks, embeddings)
+                        llm = build_llm(provider, model, api_key.strip(), streaming=True)
+                        chain, retriever = build_rag_chain(vs, llm)
+                        st.session_state.update({
+                            "vectorstore": vs, "chain": chain, "retriever": retriever,
+                            "file_names": file_names, "chunk_count": len(chunks),
+                            "messages": [], "_last_file_set": file_set,
+                        })
+                    else:
+                        st.error("Could not extract text from the uploaded files.")
+                except Exception as e:
+                    err = str(e)
+                    if "APIConnectionError" in err or "Connection" in err:
+                        st.error("Connection error — check your API key is correct and has available credits.")
+                    elif "AuthenticationError" in err or "401" in err:
+                        st.error("Invalid API key — double-check it has no extra spaces.")
+                    else:
+                        st.error(f"Error processing documents: {err}")
 
     if st.session_state.file_names:
         for name in st.session_state.file_names:
