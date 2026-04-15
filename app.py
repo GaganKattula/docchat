@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from pypdf import PdfReader
 from docx import Document as DocxDocument
+from llm_config import render_llm_selector, build_llm
 import tempfile
 import os
 
@@ -354,7 +355,27 @@ EXTRACTORS = {
 }
 
 
-def process_documents(files, api_key: str):
+def get_embeddings(provider: str, api_key: str | None):
+    """Return the appropriate embedding model for the selected provider."""
+    if provider in ("OpenAI",):
+        return OpenAIEmbeddings(api_key=api_key, model="text-embedding-3-small")
+    elif provider == "Anthropic":
+        # Anthropic has no embeddings API — fall back to a free HuggingFace model
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+        return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    elif provider == "Google Gemini":
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        return GoogleGenerativeAIEmbeddings(
+            google_api_key=api_key, model="models/text-embedding-004"
+        )
+    elif provider == "Local (Ollama)":
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+        return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    # Default fallback
+    return OpenAIEmbeddings(api_key=api_key, model="text-embedding-3-small")
+
+
+def process_documents(files, api_key: str | None, provider: str = "OpenAI"):
     all_text, file_names = [], []
     for f in files:
         extractor = EXTRACTORS.get(f.type)
@@ -372,7 +393,7 @@ def process_documents(files, api_key: str):
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     chunks = splitter.split_text("\n\n".join(all_text))
-    embeddings = OpenAIEmbeddings(api_key=api_key, model="text-embedding-3-small")
+    embeddings = get_embeddings(provider, api_key)
     vectorstore = FAISS.from_texts(chunks, embeddings)
     return vectorstore, file_names, len(chunks)
 
@@ -381,9 +402,9 @@ def format_docs(docs):
     return "\n\n---\n\n".join(doc.page_content for doc in docs)
 
 
-def build_rag_chain(vectorstore, api_key: str):
+def build_rag_chain(vectorstore, provider: str, model: str, api_key: str | None):
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
-    llm = ChatOpenAI(api_key=api_key, model="gpt-4o-mini", temperature=0.3, streaming=True)
+    llm = build_llm(provider, model, api_key, temperature=0.3, streaming=True)
     prompt = ChatPromptTemplate.from_messages([
         ("system",
          "You are a precise document assistant. Answer only from the provided context. "
@@ -421,12 +442,7 @@ with st.sidebar:
     <div class="sidebar-tagline">Instant answers from your documents</div>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="sidebar-section-label">API Key</div>', unsafe_allow_html=True)
-    api_key = st.text_input(
-        "key", label_visibility="collapsed",
-        type="password", placeholder="sk-...",
-        help="Never stored. Lives only in your browser session.",
-    )
+    provider, model, api_key, is_configured = render_llm_selector()
 
     st.markdown('<div class="sidebar-section-label">Documents</div>', unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
@@ -435,14 +451,14 @@ with st.sidebar:
         accept_multiple_files=True,
     )
 
-    if uploaded_files and api_key:
+    if uploaded_files and is_configured:
         file_set = frozenset((f.name, f.size) for f in uploaded_files)
         if file_set != st.session_state.get("_last_file_set"):
             with st.spinner("Embedding documents..."):
-                vs, names, chunks = process_documents(uploaded_files, api_key)
+                vs, names, chunks = process_documents(uploaded_files, api_key, provider)
                 if vs:
                     st.session_state.vectorstore = vs
-                    st.session_state.chain, st.session_state.retriever = build_rag_chain(vs, api_key)
+                    st.session_state.chain, st.session_state.retriever = build_rag_chain(vs, provider, model, api_key)
                     st.session_state.file_names = names
                     st.session_state.chunk_count = chunks
                     st.session_state.messages = []
@@ -476,19 +492,19 @@ with st.sidebar:
         st.write("")
         if st.button("Clear conversation", use_container_width=True):
             st.session_state.messages = []
-            if st.session_state.vectorstore and api_key:
+            if st.session_state.vectorstore and is_configured:
                 st.session_state.chain, st.session_state.retriever = build_rag_chain(
-                    st.session_state.vectorstore, api_key)
+                    st.session_state.vectorstore, provider, model, api_key)
             st.rerun()
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 # ── State: no API key ──
-if not api_key:
+if not is_configured:
     st.markdown("""
     <div class="hero">
-      <div class="hero-badge">Powered by RAG + GPT-4o mini</div>
+      <div class="hero-badge">OpenAI · Anthropic · Gemini · Local Ollama</div>
       <h1>Talk to your documents</h1>
       <div class="hero-sub">
         Upload any PDF, Word doc, or text file and ask questions in plain English.
@@ -536,7 +552,7 @@ if not api_key:
     st.stop()
 
 # ── State: API key set, no docs ──
-if not st.session_state.vectorstore:
+if not st.session_state.vectorstore and is_configured:
     st.markdown("""
     <div class="hero" style="padding-top:3rem;">
       <div class="hero-badge">API key detected</div>
