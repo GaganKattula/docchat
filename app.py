@@ -127,6 +127,28 @@ with st.sidebar:
 
     provider, model, api_key, is_configured = render_llm_selector()
 
+    # Anthropic has no embeddings API — ask for an OpenAI or Gemini key
+    embed_provider = None
+    embed_api_key = None
+    if provider == "Anthropic" and is_configured:
+        st.markdown(
+            '<div style="background:#1a1208;border:1px solid #3d2e00;border-left:3px solid #F59E0B;'
+            'border-radius:6px;padding:8px 10px;margin:8px 0;">'
+            '<div style="font-size:0.72rem;color:#F59E0B;font-weight:600;margin-bottom:3px;">Embeddings</div>'
+            '<div style="font-size:0.72rem;color:#78716c;line-height:1.5;">'
+            "Anthropic has no embeddings API. Provide an OpenAI or Gemini key for document indexing."
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
+        embed_provider = st.selectbox("Embed with", ["OpenAI", "Google Gemini"],
+                                      key="embed_provider", label_visibility="collapsed")
+        embed_api_key = st.text_input(
+            f"{embed_provider} key for embeddings", label_visibility="collapsed",
+            type="password",
+            placeholder="sk-..." if embed_provider == "OpenAI" else "AIza...",
+            key="embed_api_key",
+        )
+
     st.markdown('<div class="section-label">Documents</div>', unsafe_allow_html=True)
     uploaded_files = st.file_uploader(
         "files", label_visibility="collapsed",
@@ -140,7 +162,7 @@ with st.sidebar:
             with st.spinner("Embedding documents..."):
                 chunks, file_names = load_and_chunk(uploaded_files)
                 if chunks:
-                    embeddings = get_embeddings(provider, api_key)
+                    embeddings = get_embeddings(provider, api_key, embed_provider, embed_api_key)
                     vs = build_vectorstore(chunks, embeddings)
                     llm = build_llm(provider, model, api_key, streaming=True)
                     chain, retriever = build_rag_chain(vs, llm)

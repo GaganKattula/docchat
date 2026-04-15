@@ -28,7 +28,6 @@ dependencies = [
     "pypdf>=4.0.0",
     "python-docx>=1.0.0",
     "tiktoken>=0.6.0",
-    "sentence-transformers>=3.0.0",
 ]
 
 [project.optional-dependencies]
